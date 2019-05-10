@@ -1,0 +1,5 @@
+name = GF wallet Features
+description = "User wallet features for the giorgio-ferretti.it"
+package = Giorgio-Ferretti
+core = 7.x
+
