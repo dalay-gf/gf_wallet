@@ -1,0 +1,30 @@
+<?php
+
+
+/**
+ * Implements hook_menu().
+ */
+function gf_wallet_menu() {
+
+  $items = array();
+
+  $items['user/%user/wallet'] = array(
+    'title'           => 'Wallet',
+    'page callback'   => 'gf_wallet_user_wallet_page',
+    'page arguments'  => [1],
+    'access callback' => '_gf_wallet_user_wallet_page_access',
+    'access arguments' => [1],
+    // 'type'            => MENU_CALLBACK,
+    'type' => MENU_LOCAL_TASK,
+    'file'            => 'gf_wallet.pages.inc'
+  );
+
+  return $items;
+}
+
+
+function _gf_wallet_user_wallet_page_access($account){
+  global $user;
+  return ($user->uid == $account->uid || user_access('access administration pages') || user_access('administer gf-wallet'));
+}
+
