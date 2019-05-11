@@ -1,0 +1,26 @@
+<?php
+
+function gf_wallet_schema() {
+  $schema = [];
+  $schema['gf_wallet'] = [
+    'description' => 'The table contains information about the balances in the wallets of users.',
+    'fields' => [
+      'uid' => [
+        'description' => t('User id.'),
+        'type' => 'int',
+        'length' => 11,
+        'not null' => true,
+      ],
+      'balance' => [
+        'description' => 'Current wallet balance of the user',
+        'type' => 'numeric',
+        'precision' => 16,
+        'scale' => 5,
+        'not null' => TRUE,
+        'default' => 0.0,
+      ],
+    ],
+    'primary key' => ['uid'],
+  ];
+  return $schema;
+}
