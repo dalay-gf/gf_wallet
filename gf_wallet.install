@@ -1,5 +1,13 @@
 <?php
 
+/**
+ * @file
+ * Install, update and uninstall functions for the gf_wallet module.
+ */
+
+/**
+ * Implements hook_schema().
+ */
 function gf_wallet_schema() {
   $schema = [];
   $schema['gf_wallet'] = [
