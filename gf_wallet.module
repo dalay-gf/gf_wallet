@@ -8,9 +8,8 @@ define('GF_WALLET_CURRENCY_SYMBOL', '元');
  */
 function gf_wallet_menu() {
 
-  $items = array();
-
-  $items['user/%user/wallet'] = array(
+  $items = [];
+  $items['user/%user/wallet'] = [
     'title'           => 'Wallet',
     'page callback'   => 'gf_wallet_user_wallet_page',
     'page arguments'  => [1],
@@ -18,29 +17,25 @@ function gf_wallet_menu() {
     'access arguments' => [1],
     'type' => MENU_LOCAL_TASK,
     'file'            => 'gf_wallet.pages.inc'
-  );
-
-  $items['gf-wallet/%user/balance-edit'] = array(
+  ];
+  $items['gf-wallet/%ctools_js/update-balance/%user'] = [
     'title' => 'Change The Balance',
-    'page callback' => 'drupal_get_form',
-    'page arguments' => ['gf_wallet_balance_edit_form', 1],
-    'access arguments' => ['administer gf-wallet'],
-  );
-
-  // $items['gf-wallet/%ctools_js/balance-edit/%user'] = [
-  //   'title' => 'Change Production Order Price',
-  //   'page arguments' => [1, 3],
-  //   'page callback' => 'gf_order_prod_price_edit_js',
-  //   'access arguments' => ['gf-order change price'],
-  //   'delivery callback' => 'ajax_deliver',
-  //   'theme callback' => 'ajax_base_page_theme',
-  //   'type' => MENU_NORMAL_ITEM,
-  //   'file' => 'gf_order.pages.inc',
-  // ];
+    'page arguments' => [1, 3],
+    'page callback' => 'gf_wallet_update_balance_js',
+    'access callback' => '_gf_wallet_user_wallet_page_access',
+    'access arguments' => [3],
+    'delivery callback' => 'ajax_deliver',
+    'theme callback' => 'ajax_base_page_theme',
+    'type' => MENU_NORMAL_ITEM,
+    'file' => 'gf_wallet.pages.inc',
+  ];
 
   return $items;
 }
 
+/**
+ * Implements hook_permission().
+ */
 function gf_wallet_permission() {
   return array(
     'administer gf-wallet' => array(
@@ -50,6 +45,9 @@ function gf_wallet_permission() {
   );
 }
 
+/**
+ * Определение прав доступа к информации кошелька.
+ */
 function _gf_wallet_user_wallet_page_access($account){
   global $user;
   return ($user->uid == $account->uid || user_access('access administration pages') || user_access('administer gf-wallet'));
@@ -66,20 +64,19 @@ function gf_wallet_user_load($users) {
     ->fetchAllKeyed();
 
   foreach ($users as $user) {
-    $users[$user->uid]->wallet['balance'] = $records[$user->uid] ?: 0;
+    $users[$user->uid]->wallet['balance'] = isset($records[$user->uid]) ? round($records[$user->uid]) : 0;
   }
 }
 
-
 /**
  * Обновление баланса пользователя.
- *
  */
 function _gf_wallet_update_user_balance($uid, $balance=0) {
   global $user;
   // Обновлять разрешаем только имеющим спец. разрешение.
   if (!user_access('administer gf-wallet')) return;
 
+  // Если новый баланс не больше нуля - удаляем запись вовсе.
   if ($balance <= 0) {
     db_delete('gf_wallet')
       ->condition('uid', $uid)
@@ -97,7 +94,6 @@ function _gf_wallet_update_user_balance($uid, $balance=0) {
 
 /**
  * Форма для изменения баланса пользовательского кошелька.
- *
  */
 function gf_wallet_balance_edit_form($form, $form_state, $user) {
   $form['#uid'] = $user->uid;
@@ -105,7 +101,7 @@ function gf_wallet_balance_edit_form($form, $form_state, $user) {
     '#type' => 'textfield',
     '#title' => t('Balance'),
     '#description' => t('Change the balance of the wallet for the user !username.',
-      ['!username' => l($user->name, 'user/' . $user->uid)]),
+      ['!username' => l($user->name, 'user/' . $user->uid, ['html'=>TRUE])]),
     '#element_validate' => ['element_validate_integer'],
     '#default_value' => round($user->wallet['balance']),
   ];
@@ -118,17 +114,68 @@ function gf_wallet_balance_edit_form_submit($form, &$form_state) {
   _gf_wallet_update_user_balance($form['#uid'], $balance);
 }
 
+/**
+ * Получание данных о балансе кошелька одного отдельно взятого пользователя.
+ */
+function gf_wallet_get_user_balance($uid) {
+  $db_balance = db_query("SELECT balance from {gf_wallet} WHERE uid = :uid LIMIT 1", 
+    array(":uid" => $uid))->fetchField();
+  if ($db_balance) {
+    return round($db_balance);
+  }
+  return 0;
+}
+
+/**
+ * Implements hook_preprocess_HOOK()
+ */
+function gf_wallet_preprocess_page(&$variables) {
+  global $user;
+  if ($user->uid) {
+    $balance = gf_wallet_get_user_balance($user->uid);
+    $balance_value  = '<span class="wallet-balance-value">' . $balance . '</span>' . GF_WALLET_CURRENCY_SYMBOL;
+    // Для авторизированного пол-ля добавляем переменную с информацией о балансе
+    // кошелька.
+    $variables['gf_wallet_balance'] = l(
+      t('Your wallet balance: !balance', ['!balance'=> $balance_value]),
+      'user/' . $user->uid . '/wallet',
+      ['html' => TRUE]
+    );
+  }
+}
+
+/**
+ * Implements hook_preprocess_HOOK()
+ */
 function gf_wallet_preprocess_user_profile(&$variables) {
   $account = $variables['elements']['#account'];
-  $button_text = t('The balance of your wallet: !balance !symbol', ['!balance' => $account->wallet['balance'], 
+  $balance = $account->wallet['balance'];
+  $button_text = t('The balance of your wallet: !balance !symbol', ['!balance' => $balance, 
     '!symbol' => GF_WALLET_CURRENCY_SYMBOL]);
+  // Кнопка-ссылка на страницу кошелька с основной страницы профиля.
   $variables['gf_wallet_balance_button'] = l($button_text, 'user/' . $account->uid . '/wallet',
     array('attributes' => array('class' => array('btn', 'btn-primary')), 'html' => true));
+}
 
-  // $variables['gf_wallet_balance'] = $account->wallet['balance'];
-  // $variables['gf_wallet_update_balance_button'] = '';
-  // if (user_access('administer gf-wallet')) {
-  //   $variables['gf_wallet_update_balance_button'] = l(t('Edit balance'), 'gf-wallet/' . $account->uid . '/balance-edit',
-  //     array('attributes' => array('class' => array('wallet-update-balance-btn', 'btn', 'btn-primary')), 'html' => true));
-  // }
+/**
+ * Implements hook_preprocess_HOOK()
+ */
+function template_preprocess_gf_wallet_user_wallet_page(&$variables) {
+  $account = $variables['account'];
+  $balance = $account->wallet['balance'];
+  $variables['update_wallet_button'] = gf_wallet_make_update_balance_button($account->uid);
+  $variables['gf_wallet_balance'] = '<span class="wallet-balance-value">' . $balance . '</span> ' . GF_WALLET_CURRENCY_SYMBOL;
+}
+
+/**
+ * Implements hook_theme()
+ */
+function gf_wallet_theme() {
+  // Шаблон страницы кошелька.
+  return array(
+    'gf_wallet_user_wallet_page' => array(
+      'template' => 'gf_wallet_user_wallet_page', 
+      'arguments' => array('account' => null),
+    ),
+  );
 }
